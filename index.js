@@ -33,7 +33,6 @@ const pool = mysql.createPool({
 const redirect_uri = process.env.REDIRECT_URL;
 const issueAccessTokenUrl = 'https://api.line.me/oauth2/v2.1/token?grant_type=authorization_code';
 const verifyIdTokenUrl = 'https://api.line.me/oauth2/v2.1/verify';
-const getUserInfoUrl = 'https://api.line.me/oauth2/v2.1/userinfo';
 
 //登入取得line channel ID
 app.post('/api/login/invitation',(req, res) => {
