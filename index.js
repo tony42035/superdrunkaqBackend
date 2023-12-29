@@ -289,7 +289,7 @@ app.post('/api/codefortoken', (req, res) => {
 //測試用API
 app.get('/api/test', (req, res) => {
 
-  pool.query('SELECT * FROM orders',
+  pool.query('SELECT * FROM products',
   (err, rows) => {
     if (err) throw err;
       else {
