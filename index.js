@@ -334,4 +334,10 @@ app.post('/api/verifyMyToken', authJWTToken, (req, res) => {
   })
 })
 
-app.listen(PORT, () => console.log(`Server started http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server started http://localhost:${PORT}`);
+  console.log(process.env.REDIRECT_UR);
+  console.log(process.env.DB_PASSWORD);
+  console.log(process.env.INVITATION_CODE);
+  console.log(process.env.DB_NAME);
+});
