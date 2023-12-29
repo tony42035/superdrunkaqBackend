@@ -5,8 +5,8 @@ const CORS = require('cors');
 const axios = require('axios');
 const mysql = require('mysql');
 const { json } = require('body-parser');
-const { log } = require('console');
-const { access } = require('fs');
+const morgan = require('morgan');
+
 require('dotenv').config();
 
 //設定連線埠號
@@ -14,9 +14,9 @@ const PORT = process.env.PORT || 5000;
 
 //套件初始化
 const app = express();
+app.use(morgan('dev'));
 app.use(CORS());
 app.use(express.json());
-
 
 //使用pool連線資料庫
 const pool = mysql.createPool({
@@ -35,202 +35,126 @@ const issueAccessTokenUrl = 'https://api.line.me/oauth2/v2.1/token?grant_type=au
 const verifyIdTokenUrl = 'https://api.line.me/oauth2/v2.1/verify';
 const getUserInfoUrl = 'https://api.line.me/oauth2/v2.1/userinfo';
 
-//測試用API
-// app.get('/api', async (req, res) => {
-//   pool.query(
-//     'SELECT * FROM users',
-//     (err,rows) => {
-//       res.status(200).json(rows);
-//     }
-//   )
-// });
-  
-app.get('/api/order/getallorder',async (req, res) => {
-  let allOders = [];
-  // console.log(req.headers.authorization.split(' ')[1], '已經進入getallorder');
-  try{
-      const access_token = req.headers.authorization.split(' ')[1];
-      let userInfo = await verifyTokenFromLineAPI(access_token);
-      if (userInfo){
-        let user_id = userInfo.data.userId;
-
-        pool.query(
-          'select users.user_id, user_pic, user_name, p_size, amount from orders inner join users where orders.user_id = users.user_id order by orders.user_id',
-          (err, rows) => {
-            if (err) throw err;
-  
-            allOders = rows;
-            res.status(200).json(allOders);
-  
-            if (rows.length === 0){
-              res.status(200).json({
-                message: 'no order data',
-              })
-            }
-          });
-      }
-      
-    }catch(err){
-      res.status(500).json({
-        error: err.message,
-      });
-    }
-});
-
-//刪除user個人訂單資料
-app.get('/api/order/deletemyorder', async (req, res) => {
-  try{
-    const access_token = req.headers.authorization.split(' ')[1];
-    let userInfo = await verifyTokenFromLineAPI(access_token);
-    if(userInfo){
-      let user_id = userInfo.data.userId;
-
-      pool.query(
-        'DELETE FROM orders WHERE user_id = ?',
-        [user_id],
-        (err) => {
-          if (err){
-            res.status(500).json({
-              error: err.message,
-            })
-          }
-            res.status(200).json({
-              message: '已刪除訂單資料',
-            })
-        }
-      )
-    }
-
-
-    }catch(err){
-      console.log(err);
-    }
-});
-
-//取得user個人訂單資料
-app.get('/api/order/getmyorder', async (req, res) => {
-
-  console.log(req.headers.authorization.split(' ')[1], '已經進入getmyorder');
-  try{
-    const access_token = req.headers.authorization.split(' ')[1];
-    let userInfo = await verifyTokenFromLineAPI(access_token);
-    if (userInfo){
-      let user_id = userInfo.data.userId;
-
-      pool.query(
-        'SELECT p_size, amount FROM orders WHERE user_id = ?',
-        [user_id],
-        (err, rows) =>{
-          if (err) {
-            res.status(500).json({
-              error: err.message,
-            })
-          }else if (rows.length === 0){
-            res.status(404).json({
-              message: '沒有訂單資料',
-            })
-          } else {
-            res.status(200).json(rows);
-          }
-        }
-      )
-    }
-
-  }catch(err){
-    console.log(err);
+//登入取得line channel ID
+app.post('/api/login/invitation',(req, res) => {
+  const invitationCode = req.body.invitationCode;
+  if(process.env.INVITATION_CODE === invitationCode) {
+    res.status(200).json({
+      success: true,
+      client_id: process.env.CLIENT_ID,
+    })
+  } else {
+    res.status(200).json({
+      success: false
+    })
   }
 });
 
+//取得所有訂單
+app.get('/api/order/getallorder',authJWTToken, (req, res) => {
+  let allOders = [];
+  pool.query(
+    'select users.user_id, user_pic, user_name, p_size, amount from orders inner join users where orders.user_id = users.user_id order by orders.user_id',
+    (err, rows) => {
+      if (err) throw err;
+
+      allOders = rows;
+
+      if (rows.length === 0){
+        res.status(200).json({
+          message: 'no order data',
+        })
+      } else {
+              res.status(200).json({
+        allOders,
+        success: true
+      });
+      }
+    });
+});
+
+//刪除user個人訂單資料
+app.get('/api/order/deletemyorder', authJWTToken ,(req, res) => {
+  const user_id =req.user.userId;
+
+  pool.query(
+    'DELETE FROM orders WHERE user_id = ?',
+    [user_id],
+    (err) => {
+      if (err){
+        res.status(500).json({
+          success: false,
+          message: 'DB異常'
+        })
+      } else {
+        res.status(200).json({
+          success: true,
+          message: '已刪除訂單資料',
+        })
+      }
+    }
+  )
+});
+
+//取得user個人訂單資料
+app.get('/api/order/getmyorder', authJWTToken ,(req, res) => {
+  const user_id = req.user.userId;
+
+  pool.query(
+    'SELECT p_size, amount FROM orders WHERE user_id = ?',
+    [user_id],
+    (err, rows) =>{
+      if (err) {
+        res.status(500).json({
+          success: false,
+          message: 'DB異常'
+        })
+      }else if (rows.length === 0){
+        res.status(200).json({
+          success: false,
+          message: '沒有訂單'
+        })
+      } else {
+        res.status(200).json({
+          success: true,
+          order: rows,
+        });
+      }
+    })
+});
+
 //接收USER送出的訂單資料
-app.post('/api/order/submit', async (req, res) => {
+app.post('/api/order/submit', authJWTToken ,(req, res) => {
 
-  const multiOrder = [];
-  const orderFromUser = req.body.order;
-
-  
-try{
-  access_token = req.headers.authorization.split(' ')[1];
-
-  let userInfo = await verifyTokenFromLineAPI(access_token);
-
-  if(userInfo){
-    let user_id = userInfo.data.userId;
-
+  // const orderFromUser = req.body.order;
+  // res.send(req.body); //這是前端傳來的
+  // res.send(req.user); //這是JWT驗證解析的資料
+  // console.log('進來了沒');
+  // res.status(200).json({
+  //   success: true,
+  //   user: req.user,
+  //   order: req.body.order,
+  // });
+    const orderFromUser = req.body.order;
+    const user_id = req.user.userId;
     const values = orderFromUser.map(item => [user_id ,item.size, item.quantity]);
-    console.log(values);
 
     pool.query(
       'INSERT INTO orders (user_id, p_size, amount) VALUES ?', 
       [values], 
       (err) => {
-        if (err) throw err;
-        //console.log('已新增訂單資料');
-        res.status(200).json({
-          message: '已新增訂單資料',
-        })
+        if (err) {
+          console.error(err);
+          res.status(500).json({
+            success: false,
+            message: 'DB異常'
+          })
+        } else {
+          res.status(200).json({
+            success: true,
+          })
+        }
       });
-
-  }else{
-
-    //1.如果token無效，就回傳400，並將前端session清除，重新導向登入頁面
-    res.status(403).json({
-      message: 'Access_token無效',
-    });
-  }
-
-}catch(err){
-  //如果LINE API出現錯誤，就回傳400，並告知錯誤訊息
-  console.log(err);
-}
-
-  //1.驗證token是否有效
-
-  //2.如果token有效，就取得使用者資料
-
-  //3.如果取得使用者資料成功，就將訂單資料存入資料庫
-
-});
-
-
-//驗證token是否有效的API  
-app.post('/api/verifytoken', (req, res) => {
-  //取得前端請求的access_token
-  const access_token = req.headers.authorization.split(' ')[1];
-
-  axios.get (`${verifyIdTokenUrl}?access_token=${access_token}`)
-  .then( result => {
-
-    //如果token有效，就再發一次API取得使用者資料
-    axios.get(getUserInfoUrl, {
-      headers: {
-        'Authorization': `Bearer ${access_token}`,
-      }
-    })
-    .then (result => {
-
-      //成功取得使用者資料
-      //console.log(result.data);
-
-      res.status(200).json({
-        message: 'Access_token驗證並取得使用者資料成功',
-        data: result.data,
-      });
-
-    })
-    .catch ( err => {
-      //如果取得使用者資料失敗，就回傳錯誤訊息
-      res.status(400).json({
-        message: '使用Access_token取得使用者資料失敗',
-      })
-    })
-    console.log('有成功驗證token');
-  })
-  .catch( err => {
-    //如果token無效，就回傳錯誤訊息
-    res.status(401).json({
-      message: 'Access_token無效',
-    });
-  })
 });
 
 //確認CODE並申請token codefortoken API
@@ -241,12 +165,12 @@ app.post('/api/codefortoken', (req, res) => {
   //如果沒有code
   if (!code) {
     return res.status(400).json({
+      success: false,
       message: 'Server端沒有收到code',
     });
   }
 
   //向line申請token
-  console.log('前端已傳送Code，向line申請token...');
   axios.post(issueAccessTokenUrl,{
     client_id: process.env.CLIENT_ID,
     client_secret: process.env.CLIENT_SECRET,
@@ -262,7 +186,6 @@ app.post('/api/codefortoken', (req, res) => {
     console.log('已獲得token，向line申請使用者資料...');
     
     //先設定變數
-    const accessToken = result.data.access_token;
     const idToken = result.data.id_token;
     
     //向line申請使用者資料
@@ -279,8 +202,15 @@ app.post('/api/codefortoken', (req, res) => {
         //定義取得的使用者資料
       const userId = result.data.sub;
       const userName = result.data.name;
-      const userPicture = result.data.picture;
-      const userEmail = result.data.email;
+      const userPic = result.data.picture;
+      const userEmail = result.data.email; 
+
+      //定義要使用在JWT的資料
+      const user = {
+        userId,
+        userName,
+        userPic,
+      }
 
       console.log('已獲得使用者資料：', userId, userName, userEmail);
 
@@ -293,30 +223,48 @@ app.post('/api/codefortoken', (req, res) => {
           
           //如果資料庫沒有該使用者資料，就先新增資料
           pool.query('INSERT INTO users (user_id, user_name, user_pic, user_email) VALUES (?, ?, ?, ?)', 
-          [userId, userName, userPicture, userEmail], (err, rows) => {
+          [userId, userName, userPic, userEmail], (err, rows) => {
             if (err) throw err;
-            console.log(`已新增使用者資料：${userId}, ${userName}, ${userPicture}, ${userEmail}`);
+            console.log(`已新增使用者資料：${userId}, ${userName}, ${userPic}, ${userEmail}`);
           });
 
-          //然後回傳token
-          res.status(200).json({
-            access_token: accessToken,
-            picture: userPicture,
-            id_token: idToken,
-            sub: userId,
-            user_name: userName,
-          });
+          //此處要改成使用JWT授權
+          jwt.sign(user, process.env.TOKEN_SECRET, { expiresIn: '1h'}, (err, token) => {
+            if (err) {
+              console.log('err');
+              res.status(403),json({
+                success: false,
+                message: '無法生成金鑰',
+              })
+            } else {
+              res.json({ token, user });
+            }
+          })
 
         }else{
+
           //如果資料庫有該使用者資料，就直接回傳token
-          log('資料庫有該使用者資料，直接回傳token');
-          res.status(200).json({
-            access_token: accessToken,
-            id_token: idToken,
-            sub: userId,
-            picture: userPicture,
-            user_name: userName,
-          });
+          console.log('資料庫有該使用者資料，更新資料庫中使用者資料，並回傳TOKEN');
+          pool.query(
+            'UPDATE users SET user_name = ?, user_pic = ?, user_email = ? WHERE user_id = ?',
+            [userName, userPic, userEmail, userId],
+            (err) => {
+              if (err) throw err;
+              console.log('使用者資料更新完成');
+            }
+          )
+          //簽發JWT TOKEN
+          jwt.sign(user, process.env.TOKEN_SECRET, { expiresIn: '1h'}, (err, token) => {
+            if (err) {
+              console.log('err');
+              res.status(403),json({
+                success: false,
+                message: '無法生成金鑰',
+              })
+            } else {
+              res.json({ token, user });
+            }
+          })
         }
       })
 
@@ -324,7 +272,7 @@ app.post('/api/codefortoken', (req, res) => {
     .catch( err =>{
       //如果取得使用者資料失敗，就向前端回傳錯誤訊息
       console.log('取得使用者資料失敗');
-      res.status(401).json({
+      res.status(401).json({ 
         message: err.response.data.error_description,
       });
     })
@@ -339,39 +287,40 @@ app.post('/api/codefortoken', (req, res) => {
   })
 });
 
-//確認token是否有效
-function verifyTokenFromLineAPI (access_token){
-  //路由使用async await接收回傳值，所以這裡使用promise回傳
-  return axios.get(`https://api.line.me/oauth2/v2.1/verify?access_token=${access_token}`)
-    .then (result => {
+//使用JWT驗證的middleware
+function authJWTToken (req, res, next){
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-      //如果有效期秒數大於0，且client_id正確，就回傳使用者資訊,否則回傳false
-      if((result.data.expires_in > 0) && (result.data.client_id === process.env.CLIENT_ID)){
-        
-        return axios.get('https://api.line.me/v2/profile',{
-          headers: {
-            'Authorization': `Bearer ${access_token}`,
-          }
-        })
-        
-      }else{
-        //token valid =API 顯示無效
-        return false;
-      }
-    })
-
-    //如果取得使用者資料成功，就回傳使用者資料，否則回傳false
-    .then( userInfo => {
-      if(userInfo){
-        return userInfo;
-      }else{
-        return false;
-      }
-    })
-
-    .catch (err => {
-      throw new Error(err.response.data.error_description);
-    })
+  //如果金鑰是空的，顯示403
+  if (token == null) {
+    return res.status(403).json({
+      success: false,
+      message: '無法驗證，請重新登入',
+      btnText: '重新登入',
+    });    
+  }
+  //驗證開始
+  jwt.verify(token, process.env.TOKEN_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({
+        success: false,
+        message: '認證過期或錯誤',
+        btnText: '重新登入',
+      });
+    } else {
+      req.user = user;
+      next();
+    }
+  });
 }
+
+//驗證我開立的JWT TOKEN
+app.post('/api/verifyMyToken', authJWTToken, (req, res) => {
+  res.status(200).json({
+    success: true,
+    user: req.user,
+  })
+})
 
 app.listen(PORT, () => console.log(`Server started http://localhost:${PORT}`));
