@@ -286,6 +286,18 @@ app.post('/api/codefortoken', (req, res) => {
   })
 });
 
+//測試用API
+app.get('/api/test', (req, res) => {
+
+  pool.query('SELECT * FROM orders',
+  (err, rows) => {
+    if (err) throw err;
+      else {
+        console.log(rows);
+      }
+  })
+});
+
 //使用JWT驗證的middleware
 function authJWTToken (req, res, next){
   const authHeader = req.headers['authorization'];
