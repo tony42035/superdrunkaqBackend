@@ -310,6 +310,13 @@ app.get('/api/test', (req, res) => {
   })
 });
 
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: '成功',
+  })
+})
+
 //使用JWT驗證的middleware
 function authJWTToken (req, res, next){
   const authHeader = req.headers['authorization'];
@@ -348,8 +355,4 @@ app.post('/api/verifyMyToken', authJWTToken, (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server started http://localhost:${PORT}`);
-  console.log(process.env.REDIRECT_UR);
-  console.log(process.env.DB_PASSWORD);
-  console.log(process.env.INVITATION_CODE);
-  console.log(process.env.DB_NAME);
 });
