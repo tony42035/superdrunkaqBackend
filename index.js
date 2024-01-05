@@ -240,7 +240,7 @@ app.post('/api/codefortoken', (req, res) => {
           });
 
           //此處要改成使用JWT授權
-          jwt.sign(user, process.env.TOKEN_SECRET, { expiresIn: '1h'}, (err, token) => {
+          jwt.sign(user, process.env.TOKEN_SECRET, { expiresIn: '30d'}, (err, token) => {
             if (err) {
               console.log('err');
               res.status(403),json({
@@ -305,7 +305,9 @@ app.get('/api/test', (req, res) => {
   (err, rows) => {
     if (err) throw err;
       else {
-        console.log(rows);
+        res.status(200).json({
+          size: rows,
+        })
       }
   })
 });
