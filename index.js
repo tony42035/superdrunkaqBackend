@@ -265,7 +265,7 @@ app.post('/api/codefortoken', (req, res) => {
             }
           )
           //簽發JWT TOKEN
-          jwt.sign(user, process.env.TOKEN_SECRET, { expiresIn: '1h'}, (err, token) => {
+          jwt.sign(user, process.env.TOKEN_SECRET, { expiresIn: '30d'}, (err, token) => {
             if (err) {
               console.log('err');
               res.status(403),json({
